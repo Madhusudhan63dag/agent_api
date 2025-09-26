@@ -2,12 +2,22 @@ require("dotenv").config();
 const express = require("express");
 const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
-const Razorpay = require("razorpay"); // Add Razorpay SDK
-const crypto = require("crypto"); // For payment verification
-const axios = require("axios"); // Import axios for Shiprocket API
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
+const axios = require("axios");
+const cors = require("cors");
 
+const app = express();   // <-- move this up
+const PORT = process.env.PORT || 5000;
 
-let fetch;
+app.use(cors({
+  origin: ["http://localhost:3000","https://agent-sigma-livid.vercel.app"],   // frontend URL
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
+app.use(express.json());
+
 try {
   // For Node.js >= 18 (with built-in fetch)
   if (!globalThis.fetch) {
@@ -21,19 +31,11 @@ try {
   fetch = require("node-fetch");
 }
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-
-app.use(bodyParser.json());
-
 // Razorpay Configuration
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
-
-// Nodemailer Configuration
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -43,8 +45,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-
-// Create Razorpay Order
 app.post("/create-order", async (req, res) => {
   try {
     const { amount, currency, receipt, notes } = req.body;
@@ -117,17 +117,8 @@ app.post("/verify-payment", async (req, res) => {
 });
 
 // Order Confirmation Email Route
-// Backend: accept and render agent name
 app.post("/agent_to_customer", async (req, res) => {
   const { customerEmail, orderDetails, customerDetails, productName, agentName } = req.body;
-
-  console.log("Received order confirmation request:", { 
-    customerEmail,
-    agentName: agentName || orderDetails?.agentName || 'Call Center Agent',
-    orderDetails: JSON.stringify(orderDetails),
-    customerDetails: JSON.stringify(customerDetails),
-    productName
-  });
 
   if (!customerEmail) {
     return res.status(400).json({ success: false, message: "Customer email is required" });
@@ -220,16 +211,13 @@ app.post("/agent_to_customer", async (req, res) => {
   };
 
   try {
-    console.log("Attempting to send email to:", customerEmail);
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully:", info.messageId);
+    ("Attempting to send email to:", customerEmail);
     res.status(200).json({ success: true, message: "Confirmation email sent successfully!" });
   } catch (error) {
     console.error("Error sending confirmation email:", error);
     res.status(500).json({ success: false, message: "Failed to send confirmation email", error: error.message });
   }
 });
-
 
 // Start Server
 app.listen(PORT, () => {
