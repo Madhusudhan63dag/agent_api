@@ -25,6 +25,12 @@ try {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Enable CORS for all routes
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow these HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'] // Allow these headers
+}));
 
 app.use(bodyParser.json());
 
