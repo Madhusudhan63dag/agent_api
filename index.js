@@ -25,24 +25,9 @@ try {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for specific origins
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://agent-sigma-livid.vercel.app', // Replace with your actual frontend domain
-  process.env.NODE_ENV === 'development' ? '*' : undefined
-].filter(Boolean);
-
+// Enable CORS for all origins in development and specific origins in production
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf('*') !== -1 || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: '*', // Allow all origins temporarily to debug
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -69,6 +54,15 @@ const transporter = nodemailer.createTransport({
 
 // Create Razorpay Order
 app.post("/create-order", async (req, res) => {
+  console.log("Received create-order request:", {
+    body: req.body,
+    headers: req.headers,
+    env: {
+      hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID,
+      hasRazorpaySecret: !!process.env.RAZORPAY_KEY_SECRET
+    }
+  });
+
   try {
     // Validate environment variables
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -82,30 +76,43 @@ app.post("/create-order", async (req, res) => {
 
     const { amount, currency, receipt, notes } = req.body;
     
-    // Validate request parameters
-    if (!amount || amount <= 0) {
+    // Validate request body
+    if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Invalid amount",
-        error: "Amount must be greater than 0"
+        message: "Invalid request",
+        error: "Request body is empty"
       });
     }
     
+    // Validate amount
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount",
+        error: "Amount must be a positive number",
+        receivedAmount: amount
+      });
+    }
+    
+    const parsedAmount = parseFloat(amount);
     console.log("Creating order with params:", {
-      amount,
+      parsedAmount,
+      amountInPaise: Math.round(parsedAmount * 100),
       currency: currency || "INR",
       receipt: receipt || `receipt_${Date.now()}`
     });
     
     const options = {
-      amount: Math.round(amount * 100), // Convert to paise and ensure it's an integer
+      amount: Math.round(parsedAmount * 100), // Convert to paise and ensure it's an integer
       currency: currency || "INR",
       receipt: receipt || `receipt_${Date.now()}`,
       notes: notes || {},
     };
     
+    console.log("Calling Razorpay API with options:", options);
     const order = await razorpay.orders.create(options);
-    console.log("Order created successfully:", order.id);
+    console.log("Order created successfully:", order);
     
     res.status(200).json({
       success: true,
@@ -116,6 +123,7 @@ app.post("/create-order", async (req, res) => {
     console.error("Order creation failed:", {
       error: error.message,
       stack: error.stack,
+      requestBody: req.body,
       razorpayConfig: {
         keyId: process.env.RAZORPAY_KEY_ID ? "Present" : "Missing",
         keySecret: process.env.RAZORPAY_KEY_SECRET ? "Present" : "Missing"
@@ -126,6 +134,10 @@ app.post("/create-order", async (req, res) => {
       success: false,
       message: "Failed to create order",
       error: error.message,
+      debug: {
+        timestamp: new Date().toISOString(),
+        requestId: Date.now().toString()
+      }
     });
   }
 });
