@@ -25,11 +25,27 @@ try {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for all routes
+// Enable CORS for specific origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://agent-sigma-livid.vercel.app', // Replace with your actual frontend domain
+  process.env.NODE_ENV === 'development' ? '*' : undefined
+].filter(Boolean);
+
 app.use(cors({
-  origin: '*', // Allow all origins
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow these HTTP methods
-  allowedHeaders: ['Content-Type', 'Authorization'] // Allow these headers
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf('*') !== -1 || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 app.use(bodyParser.json());
@@ -54,24 +70,58 @@ const transporter = nodemailer.createTransport({
 // Create Razorpay Order
 app.post("/create-order", async (req, res) => {
   try {
+    // Validate environment variables
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error("Razorpay credentials missing");
+      return res.status(500).json({
+        success: false,
+        message: "Razorpay configuration error",
+        error: "Missing credentials"
+      });
+    }
+
     const { amount, currency, receipt, notes } = req.body;
     
+    // Validate request parameters
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount",
+        error: "Amount must be greater than 0"
+      });
+    }
+    
+    console.log("Creating order with params:", {
+      amount,
+      currency: currency || "INR",
+      receipt: receipt || `receipt_${Date.now()}`
+    });
+    
     const options = {
-      amount: amount * 100, // Convert to paise (Razorpay requires amount in smallest currency unit)
+      amount: Math.round(amount * 100), // Convert to paise and ensure it's an integer
       currency: currency || "INR",
       receipt: receipt || `receipt_${Date.now()}`,
       notes: notes || {},
     };
     
     const order = await razorpay.orders.create(options);
+    console.log("Order created successfully:", order.id);
     
     res.status(200).json({
       success: true,
       order,
-      key: process.env.RAZORPAY_KEY_ID, // Send key_id to frontend for initialization
+      key: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
-    console.error("Order creation failed:", error);
+    console.error("Order creation failed:", {
+      error: error.message,
+      stack: error.stack,
+      razorpayConfig: {
+        keyId: process.env.RAZORPAY_KEY_ID ? "Present" : "Missing",
+        keySecret: process.env.RAZORPAY_KEY_SECRET ? "Present" : "Missing"
+      }
+    });
+    
     res.status(500).json({
       success: false,
       message: "Failed to create order",
