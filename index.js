@@ -6,7 +6,7 @@ const Razorpay = require("razorpay"); // Add Razorpay SDK
 const crypto = require("crypto"); // For payment verification
 const axios = require("axios"); // Import axios for Shiprocket API
 
-// Handle fetch import based on Node.js version
+
 let fetch;
 try {
   // For Node.js >= 18 (with built-in fetch)
