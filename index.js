@@ -116,7 +116,6 @@ app.post("/verify-payment", async (req, res) => {
   }
 });
 
-// Order Confirmation Email Route
 app.post("/agent_to_customer", async (req, res) => {
   const { customerEmail, orderDetails, customerDetails, productName, agentName } = req.body;
 
@@ -125,19 +124,15 @@ app.post("/agent_to_customer", async (req, res) => {
   }
 
   const emailSubject = `Order Confirmation #${orderDetails.orderNumber}`;
-
+  
   // resolve agent from either top-level or orderDetails for compatibility
   const resolvedAgentName = (orderDetails && orderDetails.agentName) || agentName || 'Call Center Agent';
 
   const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
-    <head>...</head>
     <body style="margin:0; padding:0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa;">
       <table role="presentation" ...>
-        <!-- Header -->
-        <tr>...</tr>
-
         <!-- Main Content -->
         <tr>
           <td style="padding: 40px 30px;">
@@ -176,7 +171,6 @@ app.post("/agent_to_customer", async (req, res) => {
                   <td style="padding: 8px 0; color: #5a6c7d; font-weight: 500;">Payment Method:</td>
                   <td style="padding: 8px 0; color: #2c3e50; font-weight: 600; text-align: right;">${orderDetails.paymentMethod}</td>
                 </tr>
-                <!-- NEW: Agent Name -->
                 <tr>
                   <td style="padding: 8px 0; color: #5a6c7d; font-weight: 500;">Agent Name:</td>
                   <td style="padding: 8px 0; color: #2c3e50; font-weight: 700; text-align: right;">${resolvedAgentName}</td>
@@ -204,18 +198,32 @@ app.post("/agent_to_customer", async (req, res) => {
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: customerEmail,
+    to: process.env.EMAIL_USER,
     cc: process.env.EMAIL_USER,
     subject: emailSubject,
     html: htmlContent
   };
 
   try {
-    ("Attempting to send email to:", customerEmail);
-    res.status(200).json({ success: true, message: "Confirmation email sent successfully!" });
+    console.log("Attempting to send email to:", customerEmail);
+    
+    // Actually send the email
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log("Email sent successfully:", info.messageId);
+    res.status(200).json({ 
+      success: true, 
+      message: "Confirmation email sent successfully!",
+      messageId: info.messageId 
+    });
+    
   } catch (error) {
     console.error("Error sending confirmation email:", error);
-    res.status(500).json({ success: false, message: "Failed to send confirmation email", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to send confirmation email", 
+      error: error.message 
+    });
   }
 });
 
